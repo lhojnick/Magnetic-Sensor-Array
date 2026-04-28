@@ -1,0 +1,40 @@
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+*.bbl
+*.blg
+*.nav
+*.snm
+*.vrb
+
+# Keep the compiled PDF
+!docs/magnetometer_report.pdf
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Data files (logged CSVs can be large)
+data_*.csv
+*.csv
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Arduino build cache
+build/

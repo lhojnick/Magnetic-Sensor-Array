@@ -1,0 +1,1229 @@
+\documentclass[12pt]{article}
+
+% ── Packages ──────────────────────────────────────────────────────────────────
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{siunitx}
+\usepackage{array}
+\usepackage{multirow}
+
+% ── Code listing style ────────────────────────────────────────────────────────
+\lstset{
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue!70!black},
+  commentstyle=\color{gray},
+  stringstyle=\color{red!70!black},
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  frame=single,
+  breaklines=true,
+  captionpos=b,
+  tabsize=2
+}
+
+% ── Header / Footer ───────────────────────────────────────────────────────────
+\setlength{\headheight}{15pt}
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Coherent \& Quantum Optics Lab --- Purdue ECE}
+\lhead{Multi-Sensor Magnetometer PCB}
+\rfoot{Page \thepage}
+
+% ── Hyperlink colors ──────────────────────────────────────────────────────────
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!60!black,
+  urlcolor=blue!60!black,
+  citecolor=green!50!black
+}
+
+\graphicspath{{figures/}}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\begin{document}
+
+% ── Title Page ────────────────────────────────────────────────────────────────
+\begin{titlepage}
+  \centering
+  \vspace*{2cm}
+  {\LARGE\bfseries Multi-Sensor Magnetometer PCB\\[0.4em]
+  \large Design, Operation, and Programming Reference\par}
+  \vspace{1.5cm}
+  {\large Luke Hojnicki\\
+  Coherent and Quantum Optics Lab\\
+  Dr.\ Elliott, Purdue University\\[0.5em]
+  \today}
+  \vfill
+  \textit{Prepared for internal lab use. Intended audience: future lab members
+  and primary user Chunya Wang.}
+\end{titlepage}
+
+% ── Table of Contents ─────────────────────────────────────────────────────────
+\tableofcontents
+\listoffigures
+\listoftables
+\newpage
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Introduction and Purpose}
+
+\subsection{Background}
+
+This document describes the design, assembly, and operation of the
+Magnetometer PCB developed for Dr.\ Elliott's Coherent and Quantum Optics Lab
+at Purdue University. The board enables simultaneous, high-resolution
+measurement of magnetic field vectors at multiple spatial positions, which is
+required for Chunya Wang's experimental work characterizing magnetic field
+distributions in the lab environment.
+
+The system measures the three-dimensional magnetic field ($B_x$, $B_y$,
+$B_z$) at up to eight locations using MEMSIC MMC5983MA AMR sensors arranged
+across two identical PCBs connected in series via a flat flexible cable (FFC).
+Each board hosts four sensors multiplexed over a single I$^2$C bus and is
+controlled by a shared Arduino Nano Every microcontroller.
+
+\subsection{Design Goals}
+
+\begin{itemize}
+  \item Simultaneous readout of 8 MMC5983MA sensors (4 per board, 2 boards)
+  \item Single Arduino Nano Every host controller over a shared I$^2$C bus
+  \item On-board 5\,V to 3.3\,V regulation; boards powered from the Arduino's
+        USB supply
+  \item Daisy-chain expansion via FFC connector (Top-on-One-Side /
+        Bottom-on-the-Other cable type)
+  \item Address conflict resolution between boards via hardware address
+        strapping on the TCA9546A multiplexer
+  \item Minimal magnetic interference from PCB-generated fields
+        (see Section~\ref{sec:layout})
+\end{itemize}
+
+\subsection{Scope of This Document}
+
+This document covers: (1) hardware overview and component descriptions,
+(2) full circuit schematics, (3) PCB layout notes, (4) assembly and setup,
+(5) programming the board, (6) reading and interpreting sensor data, and
+(7) troubleshooting. A future student or Chunya should be able to bring the
+system from unpowered to collecting data using only this document.
+
+\newpage
+% ══════════════════════════════════════════════════════════════════════════════
+\section{System Architecture}
+
+\subsection{Block Diagram}
+
+Figure~\ref{fig:block} shows the full two-board system. The Arduino Nano Every
+acts as the I$^2$C master. Both boards share the same SDA, SCL, RST, +5\,V,
+and +3.3\,V lines routed through the FFC connector. Each board contains an
+LM3940 voltage regulator, one TCA9546A I$^2$C multiplexer, and four
+MMC5983MA sensors.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{block_diagram}
+  \caption{Full system block diagram. The Arduino Nano Every drives two
+  identical sensor boards (Board~0 and Board~1) via a shared FFC bus.}
+  \label{fig:block}
+\end{figure}
+
+\subsection{Top-Level Schematic}
+
+Figure~\ref{fig:sch_top} shows the top-level KiCad schematic for one board.
+The FFC connector routes RST, SCL, SDA, and the four mux channel pairs
+(SC0/SD0 through SC3/SD3) to the TCA9546A sub-sheet and the four MMC
+sub-sheets. Two mounting holes (H1, H2) are also indicated.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{sch_toplevel}
+  \caption{Top-level schematic showing FFC connector, TCA9546A, and four
+  MMC5983MA instances (one board).}
+  \label{fig:sch_top}
+\end{figure}
+
+\newpage
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Component Descriptions}
+
+\subsection{Component Summary}
+
+\begin{table}[H]
+  \centering
+  \caption{Key Components (per board)}
+  \begin{tabular}{llll}
+    \toprule
+    \textbf{Component} & \textbf{Part Number} & \textbf{Qty} &
+    \textbf{Function} \\
+    \midrule
+    Magnetic field sensor   & MMC5983MA    & 4 & 3-axis AMR magnetometer \\
+    I$^2$C multiplexer      & TCA9546AD    & 1 & 4-channel bus switch \\
+    Voltage regulator       & LM3940IMPX   & 1 & 5\,V $\to$ 3.3\,V LDO \\
+    FFC connector (in/out)  & \textit{[PN]} & 2 & Board-to-board bus \\
+    Bulk output cap         & 33\,\textmu F & 1 & LDO output decoupling \\
+    Mux bypass cap          & 10\,\textmu F & 1 & TCA9546A VCC \\
+    Sensor VDD bypass cap   & 1\,\textmu F & 4 & MMC5983MA VDD \\
+    Sensor CAP bypass cap   & 10\,\textmu F & 4 & MMC5983MA CAP pin \\
+    I$^2$C pull-up resistors & 2.7\,k$\Omega$ & 11 & All SDA/SCL lines \\
+    \bottomrule
+  \end{tabular}
+  \label{tab:components}
+\end{table}
+
+\subsection{MMC5983MA Magnetic Field Sensor}
+
+The MMC5983MA (MEMSIC) is a 3-axis anisotropic magnetoresistance (AMR)
+magnetic field sensor housed in a $2.0 \times 2.0 \times 1.0$\,mm LGA-16
+package. It measures $B_x$, $B_y$, and $B_z$ simultaneously and communicates
+over I$^2$C at a single fixed address of \texttt{0x30}. Key specifications
+are listed in Table~\ref{tab:mmc_specs}.
+
+\begin{table}[H]
+  \centering
+  \caption{MMC5983MA Key Specifications \cite{mmc5983ma}}
+  \begin{tabular}{lll}
+    \toprule
+    \textbf{Parameter} & \textbf{Value} & \textbf{Notes} \\
+    \midrule
+    Supply voltage (VDD)       & 1.71--3.6\,V               & \\
+    Full-scale range           & $\pm$8\,G                  & \\
+    Resolution (18-bit mode)   & 0.0625\,mG/LSB             & 18-bit output \\
+    RMS noise                  & 0.4\,mG (typ.)             & Continuous mode \\
+    Output data rate           & up to \SI{1000}{\hertz}    & \\
+    I$^2$C address             & \texttt{0x30} (fixed)      & \\
+    Operating temperature      & $-40$ to $+85$\,\textdegree C & \\
+    Package                    & LGA-16, $2.0 \times 2.0$\,mm & \\
+    \bottomrule
+  \end{tabular}
+  \label{tab:mmc_specs}
+\end{table}
+
+\subsubsection{Pin Configuration and Connections}
+
+In this design the MMC5983MA is used exclusively in I$^2$C mode.
+Table~\ref{tab:mmc_pins} lists the relevant pin assignments; SPI-only pins
+(SPL\_CS, SPL\_SDO) are left unconnected (NC).
+
+\begin{table}[H]
+  \centering
+  \caption{MMC5983MA Pin Assignment (this design)}
+  \begin{tabular}{lllp{6cm}}
+    \toprule
+    \textbf{Pin} & \textbf{Name} & \textbf{Connected to} &
+    \textbf{Notes} \\
+    \midrule
+    1  & SCL/SPL\_SCK & SCx (from mux channel) & I$^2$C clock \\
+    2  & VDD          & +3.3\,V via 1\,\textmu F cap & Supply \\
+    3  & NC           & ---                    & \\
+    4  & NC           & ---                    & \\
+    5  & SPL\_CS      & NC                     & SPI not used \\
+    6  & SPL\_SDO     & NC                     & SPI not used \\
+    7--8 & NC         & ---                    & \\
+    9  & GND          & GND                    & \\
+    10 & CAP          & GND via 10\,\textmu F  & Internal charge pump ref \\
+    11 & GND          & GND                    & \\
+    12 & NC           & ---                    & \\
+    13 & VDDIO        & +3.3\,V                & I/O voltage \\
+    14 & NC           & ---                    & \\
+    15 & INT          & NC                     & Interrupt not used \\
+    16 & SDA/SPL\_SDI & SDx (from mux channel) & I$^2$C data \\
+    \bottomrule
+  \end{tabular}
+  \label{tab:mmc_pins}
+\end{table}
+
+\subsubsection{SET/RESET Coil}
+
+The MMC5983MA contains an on-chip SET/RESET coil that drives a large current
+pulse through the sensing element to re-magnetize the Permalloy film in a
+known direction. This is necessary because:
+
+\begin{itemize}
+  \item \textbf{SET} magnetizes the film in the ``positive'' direction,
+        establishing a known reference state and removing any negative offset
+        from strong external field exposure.
+  \item \textbf{RESET} magnetizes the film in the opposite direction.
+        Taking the difference of a SET and RESET measurement,
+        $B = (B_\text{SET} - B_\text{RESET})/2$, cancels the
+        temperature-dependent bridge offset, substantially improving accuracy.
+\end{itemize}
+
+A SET or RESET pulse is issued by writing the corresponding bit in the
+\texttt{CONTROL\_0} register (\texttt{0x09}). The firmware must wait at
+least \SI{1}{\micro\second} after the pulse before issuing a measurement
+command. See Section~\ref{sec:setresetproc} for the recommended procedure.
+
+\subsubsection{Fixed I\textsuperscript{2}C Address and the Multiplexer Requirement}
+
+Because all MMC5983MA devices share the fixed I$^2$C address \texttt{0x30},
+placing more than one sensor on a single bus causes address collisions.
+The TCA9546A multiplexer resolves this by isolating each sensor on its own
+switched bus segment, presenting only one sensor to the master at a time.
+
+\subsection{TCA9546A I\textsuperscript{2}C Multiplexer}
+\label{subsec:tca}
+
+The TCA9546AD (Texas Instruments) is a low-voltage 4-channel I$^2$C bus
+switch in a VSSOP-10 package. It sits between the Arduino Nano Every (I$^2$C
+master) and the four MMC5983MA sensors, enabling the master to address each
+sensor individually by enabling only one downstream channel at a time.
+
+\subsubsection{I\textsuperscript{2}C Address Strapping}
+
+The TCA9546A I$^2$C address is determined by the logic levels on address
+pins A0--A2 (pins 1, 2, 13 in the schematic). The base address is
+\texttt{0b1110\_xxx} where \texttt{xxx = A2A1A0}, giving the range
+\texttt{0x70}--\texttt{0x77}.
+
+On this board, A2 and A1 are tied to GND. A0 is the address differentiation
+pin used to distinguish Board~0 from Board~1:
+
+\begin{table}[H]
+  \centering
+  \caption{TCA9546A Address Strapping per Board}
+  \begin{tabular}{lllll}
+    \toprule
+    \textbf{Board} & \textbf{A2} & \textbf{A1} & \textbf{A0} &
+    \textbf{I$^2$C Address} \\
+    \midrule
+    Board 0 & GND & GND & GND & \texttt{0x70} \\
+    Board 1 & GND & GND & VCC & \texttt{0x71} \\
+    \bottomrule
+  \end{tabular}
+  \label{tab:tca_addr}
+\end{table}
+
+\textbf{Important:} Both boards ship with A0 tied to GND (\texttt{0x70}).
+When connecting two boards in series, the A0 pin on Board~1's TCA9546A
+must be moved from GND to VCC to assign it address \texttt{0x71}. This
+is a solder bridge or jumper change on the board. See
+Section~\ref{sec:twoboard} for the two-board setup procedure.
+
+\subsubsection{Channel Select Register}
+
+The TCA9546A is controlled by writing a single byte to its I$^2$C address.
+Bits [3:0] enable channels 0--3 respectively; only one bit should be set
+at a time. Writing \texttt{0x00} disconnects all channels (recommended
+after each read to prevent bus contention).
+
+\begin{table}[H]
+  \centering
+  \caption{TCA9546A Channel Select Byte}
+  \begin{tabular}{lll}
+    \toprule
+    \textbf{Channel} & \textbf{Byte (hex)} & \textbf{Sensor} \\
+    \midrule
+    0 & \texttt{0x01} & U4 / MMC\_0 \\
+    1 & \texttt{0x02} & U3 / MMC\_1 \\
+    2 & \texttt{0x04} & U5 / MMC\_2 \\
+    3 & \texttt{0x08} & U6 / MMC\_3 \\
+    None & \texttt{0x00} & All disconnected \\
+    \bottomrule
+  \end{tabular}
+  \label{tab:tca_select}
+\end{table}
+
+\subsubsection{Pull-up Resistors}
+
+Each I$^2$C segment has dedicated pull-up resistors to +3.3\,V. The values
+used are $2.7\,\text{k}\Omega$ throughout (R1--R11), consistent with
+\SI{400}{\kilo\hertz} Fast-Mode operation at the expected bus capacitances.
+Specifically:
+
+\begin{itemize}
+  \item R1, R2, R3: upstream SDA, SCL, and one additional line
+  \item R4/R5, R6/R7, R8/R9, R10/R11: downstream SDA/SCL pairs for
+        channels 0--3 (SD0/SC0 through SD3/SC3)
+\end{itemize}
+
+\subsubsection{Bypass Capacitor}
+
+A 10\,\textmu F capacitor (C1) is placed on the TCA9546A VCC pin for
+bulk decoupling.
+
+\subsubsection{RESET Pin}
+
+The TCA9546A \texttt{/RESET} pin is connected to the RST net from the FFC
+connector, which is driven by the Arduino Nano Every. Asserting this pin
+low disconnects all channels and resets the channel select register to
+\texttt{0x00}. This allows the firmware to perform a hardware bus reset
+without power-cycling the entire board.
+
+\subsection{LM3940IMPX Voltage Regulator}
+
+The LM3940IMPX (U2) is a low-dropout (LDO) linear regulator that converts
+the 5\,V supply from the Arduino Nano Every USB rail to the 3.3\,V required
+by the TCA9546A and MMC5983MA sensors. A 33\,\textmu F output capacitor
+(C2) provides output stabilization and transient suppression as specified
+in the LM3940 datasheet. Both GND pins of the regulator are connected to
+the board ground plane. \textbf{Do not power the sensor VDD from the
+Arduino's 5\,V pin directly.}
+
+\subsection{FFC Connector and Daisy-Chain Bus}
+
+Each board has two FFC connectors (J4 PIN\_IN, J1 PIN\_OUT) for daisy-chain
+expansion. The 16-pin connector carries the following signals:
+
+\begin{table}[H]
+  \centering
+  \caption{FFC Connector Pinout}
+  \begin{tabular}{lll}
+    \toprule
+    \textbf{Pin(s)} & \textbf{Signal} & \textbf{Notes} \\
+    \midrule
+    1, 2, 15, 16 & GND       & Ground \\
+    3            & +5V       & Arduino USB rail \\
+    7            & SCL       & I$^2$C clock (shared bus) \\
+    10           & SDA       & I$^2$C data (shared bus) \\
+    12           & RST       & Active-low mux reset \\
+    14           & +3.3V     & Regulated output from LM3940 \\
+    4--6, 8--9, 11, 13 & NC  & Not connected \\
+    \bottomrule
+  \end{tabular}
+  \label{tab:ffc_pins}
+\end{table}
+
+\textbf{Cable orientation note:} The FFC cable used in this system is of the
+``Top-on-One-Side, Bottom-on-the-Other'' (Type B) variety. This means the
+contacts on one end face up and the contacts on the other end face down.
+Ensure the cable is inserted into each connector in the correct orientation
+to avoid a pin-reversal short. When connecting Board~0 PIN\_OUT to
+Board~1 PIN\_IN, verify that power and signal nets align before applying
+power.
+
+\subsection{Arduino Nano Every}
+
+The Arduino Nano Every serves as the I$^2$C master and USB-serial interface.
+It is based on the ATmega4809 microcontroller, operates at \SI{20}{\mega\hertz},
+and provides 3.3\,V-compatible I/O.
+
+\begin{table}[H]
+  \centering
+  \caption{Arduino Nano Every Key Specifications}
+  \begin{tabular}{ll}
+    \toprule
+    \textbf{Parameter} & \textbf{Value} \\
+    \midrule
+    Microcontroller    & ATmega4809 \\
+    CPU speed          & \SI{20}{\mega\hertz} \\
+    Flash / SRAM       & 48\,kB / 6\,kB \\
+    I$^2$C pins        & A4 (SDA), A5 (SCL) \\
+    I$^2$C speed       & Standard (100\,kHz) / Fast (400\,kHz) \\
+    USB interface      & USB CDC via SAMD11 co-processor \\
+    \bottomrule
+  \end{tabular}
+  \label{tab:nano_specs}
+\end{table}
+
+The Nano Every's A4/A5 pins connect to the shared SDA/SCL bus. A digital
+output pin connects to the RST net for hardware mux resets. The board is
+powered from USB; the on-board 3.3\,V regulator output is also forwarded to
+the sensor boards via the FFC connector.
+
+Upload instructions: select \textbf{Arduino Nano Every} under
+\textit{Tools $\rightarrow$ Board $\rightarrow$ Arduino megaAVR Boards},
+set \textit{Registers Emulation} to \textbf{None (ATMEGA4809)}, select
+the correct COM port, and click Upload.
+
+\newpage
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Circuit Schematics}
+
+\subsection{Power Distribution}
+\label{sec:power_sch}
+
+Figure~\ref{fig:sch_power} shows the power and connector schematic. The
+LM3940IMPX (U2) receives +5\,V from the FFC connector (J4 PIN\_IN, pin 3)
+and outputs +3.3\,V (VCC net) stabilized by a 33\,\textmu F capacitor (C2).
+The regulated +3.3\,V is also forwarded to the PIN\_OUT connector (J1) so
+that it is available to downstream boards in the daisy chain. SCL, SDA,
+RST, and GND are passed through both connectors unchanged.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{sch_power}
+  \caption{Power distribution and FFC connector schematic. U2 (LM3940IMPX)
+  converts +5\,V to +3.3\,V (VCC). J4 is the input FFC connector;
+  J1 passes signals to the next board in the chain.}
+  \label{fig:sch_power}
+\end{figure}
+
+\subsection{I\textsuperscript{2}C Multiplexer (TCA9546A)}
+
+Figure~\ref{fig:sch_mux} shows the TCA9546A multiplexer schematic. The
+upstream SDA and SCL lines from the FFC connector enter pins 15 and 14
+of U1 respectively, with $2.7\,\text{k}\Omega$ pull-ups (R1--R3) to VCC.
+Each of the four downstream channel pairs (SD0/SC0 through SD3/SC3) has
+its own $2.7\,\text{k}\Omega$ pull-up pair to +3.3\,V (R4--R11). Address
+pins A2 and A1 (pins 13 and 2) are tied to GND; A0 (pin 1) determines
+the board address (GND = \texttt{0x70}, VCC = \texttt{0x71}). The RESET
+pin (pin 3) is driven by the RST net from the FFC connector.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\textwidth]{sch_mux}
+  \caption{TCA9546AD I$^2$C multiplexer schematic. All pull-ups are
+  $2.7\,\text{k}\Omega$ to +3.3\,V. A0 straps select the board I$^2$C
+  address (see Table~\ref{tab:tca_addr}).}
+  \label{fig:sch_mux}
+\end{figure}
+
+\subsection{MMC5983MA Sensor Instances}
+
+All four sensors per board are identical circuits; they differ only in which
+mux channel they connect to (SC0/SD0 through SC3/SD3). Each sensor has:
+a 1\,\textmu F bypass capacitor on VDD (pins C5, C3, C7, C9 for sensors
+0--3) and a 10\,\textmu F capacitor on the CAP pin (C6, C4, C8, C10) to
+GND, as required by the MMC5983MA datasheet. SPL\_CS and SPL\_SDO are left
+unconnected to select I$^2$C mode. The INT pin is not connected as interrupt-
+driven acquisition is not used in this implementation.
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{sch_mmc0}
+    \caption{U4 / MMC\_0 (channel 0, SC0/SD0)}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{sch_mmc1}
+    \caption{U3 / MMC\_1 (channel 1, SC1/SD1)}
+  \end{subfigure}
+  \\[1em]
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{sch_mmc2}
+    \caption{U5 / MMC\_2 (channel 2, SC2/SD2)}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{sch_mmc3}
+    \caption{U6 / MMC\_3 (channel 3, SC3/SD3)}
+  \end{subfigure}
+  \caption{MMC5983MA sensor schematics. All four instances are identical;
+  each is isolated on its own TCA9546A downstream channel.}
+  \label{fig:sch_sensors}
+\end{figure}
+
+\newpage
+% ══════════════════════════════════════════════════════════════════════════════
+\section{PCB Layout}
+\label{sec:layout}
+
+\subsection{Board Overview}
+
+The PCB measures \textbf{50.05\,mm $\times$ 120.05\,mm} and uses a
+\textbf{2-layer stackup} (F\_Cu / B\_Cu) on a standard 1.6\,mm FR4 substrate.
+It was designed in KiCad~10.0.1. The board outline has a distinctive
+hourglass profile: a wider octagonal control section at the top, a narrow
+routing neck in the middle, and a wider octagonal sensor section at the
+bottom with a large circular cutout at its center.
+
+\begin{table}[H]
+  \centering
+  \caption{PCB Fabrication Specifications}
+  \begin{tabular}{ll}
+    \toprule
+    \textbf{Parameter} & \textbf{Value} \\
+    \midrule
+    Board dimensions    & 50.05\,mm $\times$ 120.05\,mm \\
+    Layer count         & 2 (F\_Cu top, B\_Cu bottom) \\
+    Board thickness     & 1.6\,mm \\
+    Min trace width     & 0.3\,mm \\
+    Pad-to-pad clearance & 0.2\,mm \\
+    Pad-to-track clearance & 0.2\,mm \\
+    Surface finish      & \textit{[HASL / ENIG / specify]} \\
+    \bottomrule
+  \end{tabular}
+  \label{tab:fab_specs}
+\end{table}
+
+\subsection{Top and Bottom Copper Layers}
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[b]{0.45\textwidth}
+    \includegraphics[width=\textwidth]{pcb_top}
+    \caption{Top copper (F\_Cu, red) with silkscreen.}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.45\textwidth}
+    \includegraphics[width=\textwidth]{pcb_bottom}
+    \caption{Bottom copper (B\_Cu, blue).}
+  \end{subfigure}
+  \caption{PCB layout rendered from Gerber files. Top layer carries nearly
+  all routing; the bottom layer provides a partial ground plane and return
+  paths.}
+  \label{fig:pcb_layers}
+\end{figure}
+
+\subsection{Board Shape and Functional Regions}
+
+The board is divided into three functional regions:
+
+\begin{enumerate}
+  \item \textbf{Control section (top octagon):} Houses the two FFC
+        connectors, the LM3940IMPX regulator (U2) with its 33\,\textmu F
+        output cap (C2), the TCA9546A multiplexer (U1) with its 10\,\textmu F
+        bypass cap (C1), and all 11 pull-up resistors (R1--R11). Two
+        mounting holes are located at the top corners of this section.
+
+  \item \textbf{Routing neck (center):} A narrow bridge carrying the eight
+        I$^2$C channel traces (SD0--SD3, SC0--SC3) from the multiplexer
+        to the sensor section. Keeping these traces confined to the neck
+        minimizes the copper area in the magnetically sensitive sensor
+        region.
+
+  \item \textbf{Sensor section (bottom octagon):} Contains the four
+        MMC5983MA sensors (U3--U6) and their associated bypass capacitors
+        (C3--C10), arranged around a large circular cutout
+        (approximately 30\,mm radius / 60\,mm diameter). The cutout allows
+        the board to be mounted concentrically around a cylindrical
+        experimental object such as a glass cell or optical tube.
+\end{enumerate}
+
+\subsection{Sensor Placement Around the Circular Cutout}
+
+The four sensors are positioned at the cardinal points of the circular
+cutout to provide spatially distributed field measurements around the
+mounted object:
+
+\begin{table}[H]
+  \centering
+  \caption{Sensor Positions Around Circular Cutout}
+  \begin{tabular}{llll}
+    \toprule
+    \textbf{Ref.} & \textbf{Channel} & \textbf{Clock position} &
+    \textbf{Notes} \\
+    \midrule
+    U3 & 1 (SC1/SD1) & 12 o'clock (top)    & \\
+    U4 & 0 (SC0/SD0) & 9 o'clock (left)    & \\
+    U6 & 3 (SC3/SD3) & 3 o'clock (right)   & \\
+    U5 & 2 (SC2/SD2) & 6 o'clock (bottom)  & \\
+    \bottomrule
+  \end{tabular}
+  \label{tab:sensor_positions}
+\end{table}
+
+Each sensor is oriented with its package aligned to the board axes. If
+absolute field direction relative to the mounted object is required,
+the orientation of each sensor's $X$, $Y$, $Z$ axes relative to the
+board frame should be recorded when installing the board in the
+experimental apparatus.
+
+\subsection{Magnetic Noise Minimization}
+
+The following layout decisions were made to minimize PCB-generated magnetic
+interference at the sensor locations:
+
+\begin{itemize}
+  \item \textbf{Functional isolation:} All active components that carry
+        significant current (regulator, mux, connectors) are confined to
+        the control section, physically separated from the sensors by the
+        narrow neck. This puts the largest current loops as far as possible
+        from the sensor LGAs.
+  \item \textbf{Bypass cap proximity:} Each sensor's 1\,\textmu F VDD cap
+        and 10\,\textmu F CAP pin cap are placed immediately adjacent to the
+        sensor pads, minimizing the loop area of high-frequency switching
+        currents.
+  \item \textbf{No ferromagnetics near sensors:} All passive components in
+        the sensor section are ceramic capacitors; no inductors or
+        ferrite-core components are placed in the bottom octagon.
+  \item \textbf{Trace routing in neck:} The I$^2$C channel traces are
+        bundled tightly through the neck and routed as differential-pair-like
+        groups (SDA/SCL per channel adjacent) to reduce loop area and
+        radiated field.
+  \item \textbf{Silkscreen note:} The board carries a ``BOILER UP!!''
+        silkscreen label on the control section --- this is cosmetic only
+        and has no electrical significance.
+\end{itemize}
+
+\newpage
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Assembly and Setup}
+
+\subsection{Bill of Materials (BOM)}
+
+\begin{table}[H]
+  \centering
+  \caption{Bill of Materials (one board)}
+  \begin{tabular}{lllll}
+    \toprule
+    \textbf{Ref.} & \textbf{Value / PN} & \textbf{Qty} &
+    \textbf{Function} & \textbf{Supplier} \\
+    \midrule
+    U1          & TCA9546AD      & 1 & I$^2$C mux       & \textit{[TI / Digikey]} \\
+    U2          & LM3940IMPX     & 1 & 5V$\to$3.3V LDO  & \textit{[TI / Digikey]} \\
+    U3--U6      & MMC5983MA      & 4 & 3-axis sensor    & \textit{[MEMSIC / Digikey]} \\
+    J1, J4      & FFC 16-pin     & 2 & Board connector  & \textit{[PN]} \\
+    C1          & 10\,\textmu F  & 1 & TCA VCC bypass   & \textit{[PN]} \\
+    C2          & 33\,\textmu F  & 1 & LDO output cap   & \textit{[PN]} \\
+    C3, C5, C7, C9 & 1\,\textmu F & 4 & Sensor VDD bypass & \textit{[PN]} \\
+    C4, C6, C8, C10 & 10\,\textmu F & 4 & Sensor CAP pin & \textit{[PN]} \\
+    R1--R11     & 2.7\,k$\Omega$ & 11 & I$^2$C pull-ups & \textit{[PN]} \\
+    H1, H2      & Mounting hole  & 2  & Mechanical      & --- \\
+    \bottomrule
+  \end{tabular}
+  \label{tab:bom}
+\end{table}
+
+\subsection{Soldering Notes}
+
+\begin{itemize}
+  \item The MMC5983MA and TCA9546AD are LGA/VSSOP packages that require
+        reflow soldering. Hand-soldering is possible for the VSSOP but
+        not recommended for the LGA sensors.
+  \item Apply flux generously under LGA pads before placing components.
+  \item After reflow, inspect all sensor and mux connections with a
+        microscope or loupe. Tombstoned or bridged pads will cause
+        I$^2$C failures.
+  \item The LM3940IMPX is a through-hole or SMD package (verify footprint);
+        solder last to avoid heat damage to nearby sensors.
+\end{itemize}
+
+\subsection{Initial Power-On Checklist}
+
+\begin{enumerate}
+  \item \textbf{Before connecting the Arduino:} Measure the +3.3\,V output
+        of U2 with a DMM. It should read $3.3\,\text{V} \pm 0.1\,\text{V}$.
+        If it reads 0\,V or 5\,V, check U2 orientation and C2 polarity.
+  \item Verify that SDA and SCL have \SI{3.3}{\volt} pull-ups by measuring
+        them at rest (should read $\approx3.3\,\text{V}$ with no activity).
+  \item Connect the Arduino and upload the I$^2$C scanner sketch
+        (Section~\ref{sec:i2c_scan}).
+  \item Confirm that \texttt{0x70} (Board 0 mux) appears in the scan.
+        If running two boards, also confirm \texttt{0x71} (Board 1 mux).
+  \item Select each mux channel in turn and verify that \texttt{0x30}
+        (MMC5983MA) appears on each channel. Eight total hits expected
+        for the two-board system.
+  \item Run the test firmware and confirm plausible field readings
+        ($\pm$ambient Earth field, roughly 0.2--0.6\,G depending on
+        orientation).
+\end{enumerate}
+
+\newpage
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Two-Board Setup}
+\label{sec:twoboard}
+
+\subsection{Overview}
+
+Two identical boards are connected in series via an FFC cable to provide
+eight sensor channels total. The Arduino Nano Every drives both boards over
+the same SDA, SCL, RST, and power lines. The two TCA9546A multiplexers are
+differentiated by I$^2$C address:
+
+\begin{itemize}
+  \item \textbf{Board 0:} Mux address \texttt{0x70} (A0 = GND,
+        factory default)
+  \item \textbf{Board 1:} Mux address \texttt{0x71} (A0 = VCC,
+        requires hardware modification)
+\end{itemize}
+
+\subsection{Hardware Modification for Board 1}
+
+On Board 1's TCA9546A (U1), the A0 pin must be changed from GND to VCC:
+
+\begin{enumerate}
+  \item Identify the A0 pad on U1 (pin 1 of TCA9546AD; see
+        Figure~\ref{fig:sch_mux}).
+  \item Remove or cut the GND connection to A0.
+  \item Bridge A0 to the VCC net (3.3\,V). A short wire or solder
+        bridge to the adjacent VCC pad is sufficient.
+  \item After the modification, confirm with an ohmmeter that A0 is
+        connected to VCC and isolated from GND.
+\end{enumerate}
+
+\subsection{FFC Cable Connection}
+
+\begin{enumerate}
+  \item Use a Type-B FFC cable (Top-on-One-Side, Bottom-on-the-Other).
+        This type is required because the PIN\_OUT connector on one board
+        faces opposite to the PIN\_IN connector on the next.
+  \item Insert one end of the cable into Board 0's PIN\_OUT connector (J1).
+        The contacts should face the correct direction for the ZIF/LIF latch
+        on that connector.
+  \item Insert the other end into Board 1's PIN\_IN connector (J4).
+  \item \textbf{Before powering on:} double-check that the +5\,V, +3.3\,V,
+        GND, SDA, and SCL pins map correctly across the connector. A pin
+        reversal will short power to GND.
+\end{enumerate}
+
+\subsection{Sensor Numbering Convention}
+
+With both boards connected, the eight sensors are addressed as follows:
+
+\begin{table}[H]
+  \centering
+  \caption{Full 8-Sensor Addressing Map}
+  \begin{tabular}{lllll}
+    \toprule
+    \textbf{Logical ID} & \textbf{Board} & \textbf{Mux addr} &
+    \textbf{Channel} & \textbf{Sensor I$^2$C addr} \\
+    \midrule
+    Sensor 0 & Board 0 & \texttt{0x70} & 0 (\texttt{0x01}) & \texttt{0x30} \\
+    Sensor 1 & Board 0 & \texttt{0x70} & 1 (\texttt{0x02}) & \texttt{0x30} \\
+    Sensor 2 & Board 0 & \texttt{0x70} & 2 (\texttt{0x04}) & \texttt{0x30} \\
+    Sensor 3 & Board 0 & \texttt{0x70} & 3 (\texttt{0x08}) & \texttt{0x30} \\
+    Sensor 4 & Board 1 & \texttt{0x71} & 0 (\texttt{0x01}) & \texttt{0x30} \\
+    Sensor 5 & Board 1 & \texttt{0x71} & 1 (\texttt{0x02}) & \texttt{0x30} \\
+    Sensor 6 & Board 1 & \texttt{0x71} & 2 (\texttt{0x04}) & \texttt{0x30} \\
+    Sensor 7 & Board 1 & \texttt{0x71} & 3 (\texttt{0x08}) & \texttt{0x30} \\
+    \bottomrule
+  \end{tabular}
+  \label{tab:sensor_map}
+\end{table}
+
+\newpage
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Programming the Board}
+
+\subsection{Development Environment}
+
+\begin{itemize}
+  \item Arduino IDE 2.x (or 1.8.x)
+  \item Board package: \textit{Arduino megaAVR Boards} (install via
+        Boards Manager, search ``megaAVR'')
+  \item Required libraries: \texttt{Wire} (built-in),
+        \textit{[MMC5983MA library --- add name and source here]}
+\end{itemize}
+
+\subsection{I\textsuperscript{2}C Scanner}
+\label{sec:i2c_scan}
+
+Use this sketch to verify hardware before running the full firmware:
+
+\begin{lstlisting}[language=C++, caption={I$^2$C scanner sketch}]
+#include <Wire.h>
+
+void setup() {
+  Wire.begin();
+  Wire.setClock(400000);  // 400 kHz Fast Mode
+  Serial.begin(115200);
+  Serial.println("I2C Scanner");
+}
+
+void loop() {
+  for (uint8_t addr = 1; addr < 127; addr++) {
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() == 0) {
+      Serial.print("Found device at 0x");
+      Serial.println(addr, HEX);
+    }
+  }
+  Serial.println("-- scan complete --");
+  delay(3000);
+}
+\end{lstlisting}
+
+Expected output (two boards):
+\begin{lstlisting}
+Found device at 0x70   <- Board 0 mux
+Found device at 0x71   <- Board 1 mux
+\end{lstlisting}
+
+After confirming both muxes, scan inside each channel:
+
+\begin{lstlisting}[language=C++, caption={Per-channel I$^2$C scan}]
+void scanChannel(uint8_t muxAddr, uint8_t channel) {
+  // Select channel
+  Wire.beginTransmission(muxAddr);
+  Wire.write(1 << channel);
+  Wire.endTransmission();
+
+  // Scan
+  Wire.beginTransmission(0x30);
+  if (Wire.endTransmission() == 0)
+    Serial.println("  MMC5983MA found at 0x30");
+  else
+    Serial.println("  No sensor!");
+
+  // Deselect
+  Wire.beginTransmission(muxAddr);
+  Wire.write(0x00);
+  Wire.endTransmission();
+}
+\end{lstlisting}
+
+\subsection{Core Firmware Structure}
+
+\begin{lstlisting}[language=C++, caption={Firmware skeleton --- main loop}]
+#include <Wire.h>
+// #include <MMC5983MA.h>  // add your library here
+
+#define MUX0  0x70
+#define MUX1  0x71
+#define MMC   0x30
+#define RST_PIN 4   // Arduino pin connected to RST net
+
+void selectSensor(uint8_t muxAddr, uint8_t channel) {
+  Wire.beginTransmission(muxAddr);
+  Wire.write(1 << channel);
+  Wire.endTransmission();
+}
+
+void deselectAll(uint8_t muxAddr) {
+  Wire.beginTransmission(muxAddr);
+  Wire.write(0x00);
+  Wire.endTransmission();
+}
+
+void resetMuxes() {
+  digitalWrite(RST_PIN, LOW);
+  delayMicroseconds(10);
+  digitalWrite(RST_PIN, HIGH);
+}
+
+void readSensor(uint8_t muxAddr, uint8_t channel,
+                float &Bx, float &By, float &Bz) {
+  selectSensor(muxAddr, channel);
+
+  // TODO: issue SET pulse, trigger measurement, read 18-bit registers
+  // Convert raw counts to Gauss:
+  //   B_G = (raw - 2^17) / (2^18 / 16.0)
+
+  deselectAll(muxAddr);
+}
+
+void setup() {
+  Wire.begin();
+  Wire.setClock(400000);
+  Serial.begin(115200);
+  pinMode(RST_PIN, OUTPUT);
+  digitalWrite(RST_PIN, HIGH);
+  resetMuxes();
+}
+
+void loop() {
+  float Bx, By, Bz;
+  // Print header
+  Serial.println("sensorID,Bx_G,By_G,Bz_G");
+
+  // Board 0 (mux 0x70), sensors 0-3
+  for (uint8_t ch = 0; ch < 4; ch++) {
+    readSensor(MUX0, ch, Bx, By, Bz);
+    Serial.print(ch); Serial.print(",");
+    Serial.print(Bx,4); Serial.print(",");
+    Serial.print(By,4); Serial.print(",");
+    Serial.println(Bz,4);
+  }
+
+  // Board 1 (mux 0x71), sensors 4-7
+  for (uint8_t ch = 0; ch < 4; ch++) {
+    readSensor(MUX1, ch, Bx, By, Bz);
+    Serial.print(ch+4); Serial.print(",");
+    Serial.print(Bx,4); Serial.print(",");
+    Serial.print(By,4); Serial.print(",");
+    Serial.println(Bz,4);
+  }
+
+  delay(100);  // 10 Hz acquisition
+}
+\end{lstlisting}
+
+\newpage
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Reading and Interpreting Data}
+
+\subsection{Output Format}
+
+The firmware streams CSV over USB-serial at 115200 baud. Each line
+represents one sensor reading:
+
+\begin{lstlisting}
+sensorID,Bx_G,By_G,Bz_G
+0,0.2341,0.0123,-0.4412
+1,0.2339,0.0120,-0.4410
+...
+7,0.2344,0.0125,-0.4415
+\end{lstlisting}
+
+Open the Arduino Serial Monitor or connect a Python script
+(see Section~\ref{sec:dataworkflow}).
+
+\subsection{Unit Conversion}
+
+The MMC5983MA outputs 18-bit unsigned integers. The zero-field output
+code is $2^{17} = 131072$. The full-scale range is $\pm8$\,G across
+$2^{18} = 262144$ counts, giving a sensitivity of
+$16\,\text{G} / 262144 = 0.0625$\,mG/LSB. The conversion is:
+
+\begin{equation}
+  B\,[\text{G}] = \frac{\text{raw} - 2^{17}}{2^{18}/16}
+               = \frac{\text{raw} - 131072}{16384}
+  \label{eq:conversion}
+\end{equation}
+
+where raw is the 18-bit output value (combined from the six measurement
+registers \texttt{0x00}--\texttt{0x05}, plus two LSBs in \texttt{0x06}).
+
+\subsection{SET/RESET Procedure}
+\label{sec:setresetproc}
+
+Issue a SET/RESET at the beginning of each acquisition session and
+periodically during long runs (recommended every 5--10 minutes, or if
+readings drift unexpectedly):
+
+\begin{enumerate}
+  \item Write \texttt{0x08} to \texttt{CONTROL\_0} (\texttt{0x09}) to
+        issue a \textbf{SET} pulse. Wait $\geq1\,\mu$s.
+  \item Take measurement $B_\text{SET}$.
+  \item Write \texttt{0x10} to \texttt{CONTROL\_0} to issue a
+        \textbf{RESET} pulse. Wait $\geq1\,\mu$s.
+  \item Take measurement $B_\text{RESET}$.
+  \item Compute $B = (B_\text{SET} - B_\text{RESET})/2$ to cancel the
+        DC offset.
+\end{enumerate}
+
+For continuous monitoring where offset cancellation is less critical,
+a single SET at startup followed by triggered measurements is acceptable.
+
+\subsection{Data Collection Workflow (for Chunya)}
+\label{sec:dataworkflow}
+
+\begin{enumerate}
+  \item Connect the Arduino Nano Every to the computer via USB.
+  \item Open a terminal or run the Python logger script:
+\begin{lstlisting}[language=Python, caption={Minimal Python logger}]
+import serial, csv, time
+
+port = "COM3"          # Windows: COMx; Linux/Mac: /dev/ttyACM0
+baud = 115200
+
+with serial.Serial(port, baud, timeout=1) as ser, \
+     open("data.csv", "w", newline="") as f:
+    writer = csv.writer(f)
+    writer.writerow(["time_s","id","Bx","By","Bz"])
+    t0 = time.time()
+    while True:
+        line = ser.readline().decode().strip()
+        if line and not line.startswith("sensor"):
+            parts = line.split(",")
+            writer.writerow([round(time.time()-t0,3)] + parts)
+\end{lstlisting}
+  \item Allow the system to warm up for 30 seconds before recording data.
+  \item Issue a SET/RESET at the start of each run (see above or
+        press the reset button to re-run \texttt{setup()}).
+  \item Stop logging with Ctrl-C; data is saved to \texttt{data.csv}.
+  \item Verify data with \texttt{pandas}: confirm all 8 sensor IDs
+        appear and field magnitudes are in the range 0.2--0.6\,G
+        (ambient Earth field).
+\end{enumerate}
+
+\newpage
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Troubleshooting}
+
+\begin{table}[H]
+  \centering
+  \caption{Common Issues and Resolutions}
+  \begin{tabular}{p{3.8cm} p{4.2cm} p{5cm}}
+    \toprule
+    \textbf{Symptom} & \textbf{Likely Cause} & \textbf{Resolution} \\
+    \midrule
+    I$^2$C scanner shows nothing
+      & Pull-ups missing; solder joint on mux
+      & Verify 2.7\,k$\Omega$ on SDA/SCL; reflow U1 \\
+    \addlinespace
+    Only one mux found (e.g., only \texttt{0x70})
+      & Board 1 A0 not moved to VCC
+      & Rework A0 solder bridge on Board 1 TCA9546A (see Section~\ref{sec:twoboard}) \\
+    \addlinespace
+    Mux found but sensor \texttt{0x30} missing on a channel
+      & Bad reflow on that MMC5983MA; wrong channel byte
+      & Re-solder suspect sensor; check channel select logic \\
+    \addlinespace
+    All-zeros or maxed-out readings
+      & SET/RESET not issued; sensor not in I$^2$C mode (SPL\_CS floating)
+      & Issue SET before measurement; verify SPL\_CS is NC not floating \\
+    \addlinespace
+    Noisy / drifting readings
+      & Insufficient SET/RESET; ferromagnetic object nearby
+      & Repeat SET/RESET; remove tools or cables from sensor vicinity \\
+    \addlinespace
+    FFC cable connects but no comms
+      & Cable orientation wrong (not Type-B)
+      & Flip cable end-for-end; re-check contact orientation \\
+    \addlinespace
+    Upload fails (Nano Every)
+      & Wrong board/Registers Emulation setting
+      & Set Registers Emulation to ``None (ATMEGA4809)''; double-tap reset \\
+    \addlinespace
+    LM3940 output $\neq$ 3.3\,V
+      & C2 wrong polarity; U2 misorientated
+      & Verify C2 ($+$ to OUT pin); check U2 pin 1 marker \\
+    \bottomrule
+  \end{tabular}
+  \label{tab:troubleshoot}
+\end{table}
+
+\subsection{Using an Oscilloscope to Debug I\textsuperscript{2}C}
+
+Probe SDA on pin 15 and SCL on pin 14 of U1. A healthy transaction at
+400\,kHz should show:
+\begin{itemize}
+  \item SCL: clean square wave, 400\,kHz period, logic-high $\approx3.3\,\text{V}$.
+  \item SDA: data transitions only when SCL is low; stable during SCL high.
+  \item ACK: SDA pulled low by the device on the 9th clock pulse.
+\end{itemize}
+
+If SDA does not return high between transactions, suspect a stuck device.
+Assert the RST pin low for $>10\,\mu$s to reset the mux and clear any
+stuck state.
+
+\subsection{Bus Recovery Procedure}
+
+If the I$^2$C bus hangs (SDA stuck low):
+\begin{enumerate}
+  \item Assert RST\_PIN low from the Arduino for \SI{100}{\micro\second}.
+  \item Release RST\_PIN high.
+  \item Call \texttt{Wire.end()} then \texttt{Wire.begin()} in firmware to
+        reinitialize the TWI peripheral.
+  \item Re-run the I$^2$C scanner to confirm bus recovery.
+\end{enumerate}
+
+\newpage
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Known Limitations and Future Work}
+
+\begin{itemize}
+  \item \textbf{No on-chip temperature compensation:} The MMC5983MA offset
+        drifts with temperature. For precision measurements over long runs,
+        periodically repeat the SET/RESET subtraction procedure.
+  \item \textbf{No interrupt-driven acquisition:} The INT pin is unused;
+        the firmware polls the measurement-done bit. A future revision
+        could wire INT to an Arduino input to reduce latency and CPU load.
+  \item \textbf{Expansion limited to 8 addresses (0x70--0x77):} A maximum
+        of 8 boards (32 sensors) can share a single I$^2$C bus using the
+        TCA9546A address range. Beyond this, a second hardware I$^2$C
+        bus or a different mux topology is required.
+  \item \textbf{FFC cable length sensitivity:} Long FFC cables increase
+        bus capacitance. If communication errors occur with cables
+        $>$30\,cm, reduce \texttt{Wire.setClock()} to 100\,kHz.
+  \item \textbf{SPI mode not implemented:} The MMC5983MA supports SPI for
+        faster data rates ($>$1\,MHz). If the 400\,kHz I$^2$C throughput
+        proves insufficient for future experiments, a board redesign
+        using SPI would allow much higher sample rates.
+\end{itemize}
+
+\newpage
+% ══════════════════════════════════════════════════════════════════════════════
+\section*{Acknowledgments}
+\addcontentsline{toc}{section}{Acknowledgments}
+
+Thank you to Dr.\ Elliott for guidance throughout this project, and to
+Chunya Wang for testing the two-board configuration and identifying
+the I$^2$C address conflict (and its solution) during system bring-up.
+
+\newpage
+% ══════════════════════════════════════════════════════════════════════════════
+\begin{thebibliography}{9}
+
+\bibitem{mmc5983ma}
+  MEMSIC, \textit{MMC5983MA 3-Axis Magnetic Sensor with I$^2$C/SPI Interface
+  Datasheet}, Rev.\ A.
+
+\bibitem{tca9546a}
+  Texas Instruments, \textit{TCA9546A Low-Voltage 4-Channel I$^2$C Switch
+  with Reset Datasheet}, SCPS204.
+
+\bibitem{lm3940}
+  Texas Instruments, \textit{LM3940 1-A Low-Dropout Regulator for 5-V to
+  3.3-V Conversion Datasheet}, SNOS386.
+
+\bibitem{nanoevery}
+  Arduino, \textit{Arduino Nano Every Datasheet and Pinout Reference},
+  \url{https://docs.arduino.cc/hardware/nano-every}.
+
+\bibitem{kicad}
+  KiCad EDA, \url{https://www.kicad.org}.
+
+\end{thebibliography}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\appendix
+
+\section{I\textsuperscript{2}C Address Map}
+
+\begin{table}[H]
+  \centering
+  \caption{Complete I$^2$C Address Map (two-board system)}
+  \begin{tabular}{llll}
+    \toprule
+    \textbf{Device} & \textbf{Address} & \textbf{Board} &
+    \textbf{Notes} \\
+    \midrule
+    TCA9546A (U1) & \texttt{0x70} & Board 0 & A0=GND \\
+    TCA9546A (U1) & \texttt{0x71} & Board 1 & A0=VCC \\
+    MMC5983MA (U3--U6) & \texttt{0x30} & Both & Isolated per mux channel \\
+    Arduino Nano Every & --- & --- & Master only, no slave addr \\
+    \bottomrule
+  \end{tabular}
+  \label{tab:i2c_map}
+\end{table}
+
+\section{Register Quick Reference}
+
+\begin{table}[H]
+  \centering
+  \caption{MMC5983MA Key Registers}
+  \begin{tabular}{lllp{6cm}}
+    \toprule
+    \textbf{Reg (hex)} & \textbf{Name} & \textbf{R/W} & \textbf{Description} \\
+    \midrule
+    0x00 & Xout0  & R & X-axis output [17:10] \\
+    0x01 & Xout1  & R & X-axis output [9:2] \\
+    0x02 & Yout0  & R & Y-axis output [17:10] \\
+    0x03 & Yout1  & R & Y-axis output [9:2] \\
+    0x04 & Zout0  & R & Z-axis output [17:10] \\
+    0x05 & Zout1  & R & Z-axis output [9:2] \\
+    0x06 & XYZout2 & R & Bits [1:0] of X, Y, Z (18-bit) \\
+    0x08 & Status & R & Bit 0: Meas\_M\_Done \\
+    0x09 & Control\_0 & W & Bit 0: TM\_M (trigger); Bit 3: SET; Bit 4: RESET \\
+    0x0A & Control\_1 & W & BW[1:0]: bandwidth / ODR select \\
+    0x2F & Product ID & R & Should read \texttt{0x30} \\
+    \bottomrule
+  \end{tabular}
+  \label{tab:registers}
+\end{table}
+
+\section{Gerber File Manifest}
+
+All Gerber files were generated from KiCad~10.0.1 on 2026-04-27.
+The job file is \texttt{MAG\_PCB\_FINAL-job.gbrjob}.
+
+\begin{table}[H]
+  \centering
+  \caption{Gerber File Manifest}
+  \begin{tabular}{lll}
+    \toprule
+    \textbf{Filename} & \textbf{Layer} & \textbf{Function} \\
+    \midrule
+    \texttt{MAG PCB FINAL-F\_Cu.gbr}         & F\_Cu (L1)       & Top copper, all signal routing \\
+    \texttt{MAG PCB FINAL-B\_Cu.gbr}         & B\_Cu (L2)       & Bottom copper, ground/return paths \\
+    \texttt{MAG PCB FINAL-F\_Paste.gbr}      & F\_Paste         & Top solder paste (stencil) \\
+    \texttt{MAG PCB FINAL-B\_Paste.gbr}      & B\_Paste         & Bottom solder paste \\
+    \texttt{MAG PCB FINAL-F\_Silkscreen.gbr} & F\_Silkscreen    & Top component labels and outline \\
+    \texttt{MAG PCB FINAL-B\_Silkscreen.gbr} & B\_Silkscreen    & Bottom labels \\
+    \texttt{MAG PCB FINAL-F\_Mask.gbr}       & F\_Mask          & Top solder mask (openings) \\
+    \texttt{MAG PCB FINAL-B\_Mask.gbr}       & B\_Mask          & Bottom solder mask \\
+    \texttt{MAG PCB FINAL-Edge\_Cuts.gbr}    & Edge\_Cuts       & Board outline / routed profile \\
+    \texttt{MAG PCB FINAL-job.gbrjob}        & ---              & Gerber job file (fab instructions) \\
+    \bottomrule
+  \end{tabular}
+  \label{tab:gerbers}
+\end{table}
+
+Submit all ten files to the PCB fabricator. The job file encodes the
+board size (50.05\,mm $\times$ 120.05\,mm), layer count (2),
+thickness (1.6\,mm), and design rules automatically.
+\end{document}
