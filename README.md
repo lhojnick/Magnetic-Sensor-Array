@@ -123,7 +123,7 @@ python python/logger.py --port COM3 --output data.csv
 
 | Parameter | Value |
 |---|---|
-| Dimensions | 50.05 mm × 120.05 mm |
+| Dimensions | 50 mm × 120 mm |
 | Layer count | 2 (F_Cu / B_Cu) |
 | Board thickness | 1.6 mm |
 | Min trace width | 0.3 mm |
